@@ -5,11 +5,20 @@ metadata:
   labels:
     {{- include "fastapiapp.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.service.type | default "ClusterIP" }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.targetPort }}
-      nodePort: {{ .Values.service.nodePort }}
+    - port: {{ .Values.service.port | default 80 }}
+      targetPort: {{ .Values.service.targetPort | default 8000 }}
+      nodePort:
+        {{- if index .Values.namespaces .Release.Namespace }}
+          {{- if eq .Release.Name "movie" }}
+            {{ index .Values.namespaces .Release.Namespace "movie" "service" "nodePort" }}
+          {{- else if eq .Release.Name "cast" }}
+            {{ index .Values.namespaces .Release.Namespace "cast" "service" "nodePort" }}
+          {{- end }}
+        {{- else }}
+          {{ .Values.service.nodePort | default "" }}
+        {{- end }}
       protocol: TCP
       name: http
   selector:

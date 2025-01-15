@@ -11,6 +11,7 @@ pipeline {
             steps {
                 script {
                     sh '''
+                    # Build des images Docker pour les services
                     docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
                     docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
                     '''
@@ -24,6 +25,7 @@ pipeline {
             steps {
                 script {
                     sh '''
+                    # Push des images Docker vers DockerHub
                     echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
                     docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
                     docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
@@ -31,20 +33,61 @@ pipeline {
                 }
             }
         }
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to Kubernetes in dev') {
             environment {
                 KUBECONFIG = credentials("config")
             }
             steps {
                 script {
                     sh '''
+                    # Configuration de l'accès Kubernetes
                     rm -Rf .kube
                     mkdir .kube
                     cat $KUBECONFIG > .kube/config
+
+                    # Mise à jour du fichier values.yaml
                     cp charts/values.yaml values.yml
                     sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-                    helm upgrade --install movie charts --values=values.yml --namespace dev
-                    helm upgrade --install cast charts --values=values.yml --namespace dev
+
+                    # Déploiement avec Helm pour dev
+                    helm upgrade --install movie ./charts --values=values.yml --namespace dev --set serviceName=movie
+                    helm upgrade --install cast ./charts --values=values.yml --namespace dev --set serviceName=cast
+                    '''
+                }
+            }
+        }
+        stage('Deploy to Kubernetes in qa') {
+            steps {
+                script {
+                    sh '''
+                    # Déploiement avec Helm pour qa
+                    helm upgrade --install movie ./charts --values=values.yml --namespace qa --set serviceName=movie
+                    helm upgrade --install cast ./charts --values=values.yml --namespace qa --set serviceName=cast
+                    '''
+                }
+            }
+        }
+        stage('Deploy to Kubernetes in staging') {
+            steps {
+                script {
+                    sh '''
+                    # Déploiement avec Helm pour staging
+                    helm upgrade --install movie ./charts --values=values.yml --namespace staging --set serviceName=movie
+                    helm upgrade --install cast ./charts --values=values.yml --namespace staging --set serviceName=cast
+                    '''
+                }
+            }
+        }
+        stage('Deploy to Kubernetes in prod') {
+            steps {
+                script {
+                    timeout(time: 15, unit: "MINUTES") {
+                        input message: 'Do you want to deploy in production?', ok: 'Deploy'
+                    }
+                    sh '''
+                    # Déploiement avec Helm pour prod
+                    helm upgrade --install movie ./charts --values=values.yml --namespace prod --set serviceName=movie
+                    helm upgrade --install cast ./charts --values=values.yml --namespace prod --set serviceName=cast
                     '''
                 }
             }
@@ -52,7 +95,7 @@ pipeline {
     }
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'Pipeline completed successfully for all namespaces!'
         }
         failure {
             echo 'Pipeline failed. Check logs for more details.'
