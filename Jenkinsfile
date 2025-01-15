@@ -1,55 +1,37 @@
 pipeline {
     environment {
         DOCKER_ID = "benjaminbarral" // DockerHub username
-        DOCKER_IMAGE = "jenkins_devops_exams" // Nom de l'image
-        DOCKER_TAG = "v.${BUILD_ID}.0" // Tag basé sur le numéro du build
+        MOVIE_IMAGE = "jenkins_movie_service"
+        CAST_IMAGE = "jenkins_cast_service"
+        DOCKER_TAG = "v.${BUILD_ID}.0" // Tag basé sur le numéro de build
     }
-    agent any // Utilise n'importe quel agent disponible
+    agent any
     stages {
-        stage('Docker Build') { // Construction de l'image Docker
+        stage('Docker Build') {
             steps {
                 script {
                     sh '''
-                    docker rm -f jenkins || true
-                    docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG .
-                    sleep 5
+                    docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
+                    docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
                     '''
                 }
             }
         }
-        stage('Docker Run') { // Exécution de l'image Docker localement pour vérification
-            steps {
-                script {
-                    sh '''
-                    docker run -d -p 80:80 --name jenkins $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG || true
-                    sleep 10
-                    '''
-                }
-            }
-        }
-        stage('Test Acceptance') { // Vérification que le conteneur répond correctement
-            steps {
-                script {
-                    sh '''
-                    curl localhost
-                    '''
-                }
-            }
-        }
-        stage('Docker Push') { // Pousser l'image sur DockerHub
+        stage('Docker Push') {
             environment {
                 DOCKER_PASS = credentials("DOCKER_HUB_PASS")
             }
             steps {
                 script {
                     sh '''
-                    docker login -u $DOCKER_ID -p $DOCKER_PASS
-                    docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
+                    echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
+                    docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
+                    docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
                     '''
                 }
             }
         }
-        stage('Deploiement en dev') { // Déploiement sur l'environnement `dev`
+        stage('Deploy to Kubernetes') {
             environment {
                 KUBECONFIG = credentials("config")
             }
@@ -59,46 +41,10 @@ pipeline {
                     rm -Rf .kube
                     mkdir .kube
                     cat $KUBECONFIG > .kube/config
-                    cp fastapi/values.yaml values.yml
+                    cp charts/values.yaml values.yml
                     sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-                    helm upgrade --install app fastapi --values=values.yml --namespace dev
-                    '''
-                }
-            }
-        }
-        stage('Deploiement en staging') { // Déploiement sur l'environnement `staging`
-            environment {
-                KUBECONFIG = credentials("config")
-            }
-            steps {
-                script {
-                    sh '''
-                    rm -Rf .kube
-                    mkdir .kube
-                    cat $KUBECONFIG > .kube/config
-                    cp fastapi/values.yaml values.yml
-                    sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-                    helm upgrade --install app fastapi --values=values.yml --namespace staging
-                    '''
-                }
-            }
-        }
-        stage('Deploiement en prod') { // Déploiement sur l'environnement `prod` avec validation manuelle
-            environment {
-                KUBECONFIG = credentials("config")
-            }
-            steps {
-                timeout(time: 15, unit: "MINUTES") {
-                    input message: 'Do you want to deploy in production?', ok: 'Yes'
-                }
-                script {
-                    sh '''
-                    rm -Rf .kube
-                    mkdir .kube
-                    cat $KUBECONFIG > .kube/config
-                    cp fastapi/values.yaml values.yml
-                    sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-                    helm upgrade --install app fastapi --values=values.yml --namespace prod
+                    helm upgrade --install movie charts --values=values.yml --namespace dev
+                    helm upgrade --install cast charts --values=values.yml --namespace dev
                     '''
                 }
             }
