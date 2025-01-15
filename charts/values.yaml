@@ -1,13 +1,15 @@
+---
 # Configuration générale
-fullnameOverride: "" # Laisser vide pour permettre des noms uniques par release
-nameOverride: ""     # Nom simplifié pour l'application
+fullnameOverride: ""  # Laisser vide pour permettre des noms uniques par release
+nameOverride: ""      # Nom simplifié pour l'application
 
 # Configuration des réplicas
 replicaCount: 3
 
 # Configuration des images Docker
 image:
-  repository: "benjaminbarral/jenkins_movie_service" # Image par défaut pour le déploiement
+  repository: "benjaminbarral/jenkins_movie_service"
+  # Image pour le déploiement
   pullPolicy: IfNotPresent
   tag: "v.3.0"
 
@@ -20,7 +22,7 @@ imagePullSecrets: []
 # Compte service
 serviceAccount:
   create: true
-  name: "" # Nom spécifique à chaque release
+  name: ""  # Nom spécifique à chaque release
 
 # Annotations et labels pour les pods
 podAnnotations: {}
@@ -35,7 +37,8 @@ service:
   type: NodePort
   port: 80
   targetPort: 8000
-  nodePort: null # Cette clé sera remplacée par les valeurs spécifiques au namespace
+  nodePort: null
+  # Clé remplacée par les valeurs spécifiques au namespace
 
 # Configuration de l'ingress (désactivé par défaut)
 ingress:
@@ -49,7 +52,7 @@ ingress:
           pathType: ImplementationSpecific
   tls: []
 
-# Configuration des ressources (laisser vide pour utiliser les valeurs par défaut du cluster)
+# Configuration des ressources
 resources: {}
 # Exemple si nécessaire :
 # resources:
@@ -60,7 +63,7 @@ resources: {}
 #     cpu: 100m
 #     memory: 128Mi
 
-# Autoscaling (désactivé par défaut)
+# Autoscaling
 autoscaling:
   enabled: false
   minReplicas: 1
