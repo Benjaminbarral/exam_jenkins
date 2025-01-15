@@ -76,33 +76,3 @@ tolerations: []
 affinity: {}
 
 # Configuration spécifique par namespace (facultatif)
-# Vous pouvez définir des `nodePorts` spécifiques pour chaque namespace ici, si nécessaire.
-namespaces:
-  dev:
-    movie:
-      service:
-        nodePort: null
-    cast:
-      service:
-        nodePort: null
-  qa:
-    movie:
-      service:
-        nodePort: null
-    cast:
-      service:
-        nodePort: null
-  staging:
-    movie:
-      service:
-        nodePort: null
-    cast:
-      service:
-        nodePort: null
-  prod:
-    movie:
-      service:
-        nodePort: null
-    cast:
-      service:
-        nodePort: null
