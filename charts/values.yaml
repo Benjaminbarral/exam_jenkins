@@ -91,7 +91,7 @@ namespaces:
     cast:
       service:
         nodePort: 30022
-  staging:
+  staging: # Section pour le namespace staging
     movie:
       service:
         nodePort: 30030
