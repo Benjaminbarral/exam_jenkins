@@ -1,50 +1,23 @@
 pipeline {
     environment {
-        DOCKER_ID = "benjaminbarral" // DockerHub username
+        DOCKER_ID = "benjaminbarral"
         MOVIE_IMAGE = "jenkins_movie_service"
         CAST_IMAGE = "jenkins_cast_service"
-        DOCKER_TAG = "v.${BUILD_ID}.0" // Tag basé sur le numéro de build
+        DOCKER_TAG = "v.${BUILD_ID}.0"
+        KUBECONFIG = credentials("config") // Fichier kubeconfig depuis les credentials
     }
     agent any
     stages {
-        stage('Docker Build') {
-            steps {
-                script {
-                    echo "Building Docker images for movie and cast services"
-                    sh '''
-                    docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
-                    docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
-                    '''
-                }
-            }
-        }
-        stage('Docker Push') {
-            environment {
-                DOCKER_PASS = credentials("DOCKER_HUB_PASS") // Utilisation du credential Jenkins
-            }
-            steps {
-                script {
-                    echo "Pushing Docker images to DockerHub"
-                    sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
-                    docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
-                    docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
-                    '''
-                }
-            }
-        }
         stage('Prepare Kubernetes Config') {
-            environment {
-                KUBECONFIG = credentials("config") // Fichier kubeconfig depuis les credentials Jenkins
-            }
             steps {
                 script {
                     echo "Configuring Kubernetes access"
                     sh '''
                     mkdir -p ~/.kube
                     chmod 700 ~/.kube
-                    echo "$KUBECONFIG" > ~/.kube/config
+                    cp ${KUBECONFIG} ~/.kube/config
                     chmod 600 ~/.kube/config
+                    export KUBECONFIG=~/.kube/config
                     '''
                 }
             }
