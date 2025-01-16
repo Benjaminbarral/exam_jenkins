@@ -5,9 +5,33 @@ pipeline {
         CAST_IMAGE = "jenkins_cast_service"
         DOCKER_TAG = "v.${BUILD_ID}.0"
         KUBECONFIG = credentials("config") // Fichier kubeconfig depuis les credentials
+        DOCKER_PASS = credentials("DOCKER_HUB_PASS") // Mot de passe Docker Hub
     }
     agent any
     stages {
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    echo "Building Docker images for movie and cast services"
+                    sh '''
+                    docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
+                    docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
+                    '''
+                }
+            }
+        }
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    echo "Pushing Docker images to Docker Hub"
+                    sh '''
+                    echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
+                    docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
+                    docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
+                    '''
+                }
+            }
+        }
         stage('Prepare Kubernetes Config') {
             steps {
                 script {
@@ -25,7 +49,6 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Liste des namespaces cibles
                     def namespaces = ['dev', 'qa', 'staging', 'prod']
                     for (namespace in namespaces) {
                         echo "Deploying to ${namespace} namespace"
