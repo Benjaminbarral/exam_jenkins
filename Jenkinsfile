@@ -10,8 +10,8 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
+                    echo "Building Docker images for movie and cast services"
                     sh '''
-                    # Build des images Docker pour les services
                     docker build -t $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG ./movie-service
                     docker build -t $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG ./cast-service
                     '''
@@ -20,12 +20,12 @@ pipeline {
         }
         stage('Docker Push') {
             environment {
-                DOCKER_PASS = credentials("DOCKER_HUB_PASS")
+                DOCKER_PASS = credentials("DOCKER_HUB_PASS") // Utilisation du credential Jenkins
             }
             steps {
                 script {
+                    echo "Pushing Docker images to DockerHub"
                     sh '''
-                    # Push des images Docker vers DockerHub
                     echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
                     docker push $DOCKER_ID/$MOVIE_IMAGE:$DOCKER_TAG
                     docker push $DOCKER_ID/$CAST_IMAGE:$DOCKER_TAG
@@ -33,62 +33,31 @@ pipeline {
                 }
             }
         }
-        stage('Deploy to Kubernetes in dev') {
+        stage('Prepare Kubernetes Config') {
             environment {
-                KUBECONFIG = credentials("config")
+                KUBECONFIG = credentials("config") // Fichier kubeconfig depuis les credentials Jenkins
             }
             steps {
                 script {
+                    echo "Configuring Kubernetes access"
                     sh '''
-                    # Configuration de l'accès Kubernetes
-                    rm -Rf .kube
-                    mkdir .kube
-                    cat $KUBECONFIG > .kube/config
-
-                    # Mise à jour du fichier values.yaml
-                    cp charts/values.yaml values.yml
-                    sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-
-                    # Déploiement avec Helm pour dev
-                    helm upgrade --install movie ./charts --values=values.yml --namespace dev --set serviceName=movie
-                    helm upgrade --install cast ./charts --values=values.yml --namespace dev --set serviceName=cast
+                    mkdir -p ~/.kube
+                    chmod 700 ~/.kube
+                    echo "$KUBECONFIG" > ~/.kube/config
+                    chmod 600 ~/.kube/config
                     '''
                 }
             }
         }
-        stage('Deploy to Kubernetes in qa') {
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    sh '''
-                    # Déploiement avec Helm pour qa
-                    helm upgrade --install movie ./charts --values=values.yml --namespace qa --set serviceName=movie
-                    helm upgrade --install cast ./charts --values=values.yml --namespace qa --set serviceName=cast
-                    '''
-                }
-            }
-        }
-        stage('Deploy to Kubernetes in staging') {
-            steps {
-                script {
-                    sh '''
-                    # Déploiement avec Helm pour staging
-                    helm upgrade --install movie ./charts --values=values.yml --namespace staging --set serviceName=movie
-                    helm upgrade --install cast ./charts --values=values.yml --namespace staging --set serviceName=cast
-                    '''
-                }
-            }
-        }
-        stage('Deploy to Kubernetes in prod') {
-            steps {
-                script {
-                    timeout(time: 15, unit: "MINUTES") {
-                        input message: 'Do you want to deploy in production?', ok: 'Deploy'
+                    // Liste des namespaces cibles
+                    def namespaces = ['dev', 'qa', 'staging', 'prod']
+                    for (namespace in namespaces) {
+                        echo "Deploying to ${namespace} namespace"
+                        deployHelm(namespace)
                     }
-                    sh '''
-                    # Déploiement avec Helm pour prod
-                    helm upgrade --install movie ./charts --values=values.yml --namespace prod --set serviceName=movie
-                    helm upgrade --install cast ./charts --values=values.yml --namespace prod --set serviceName=cast
-                    '''
                 }
             }
         }
@@ -101,4 +70,19 @@ pipeline {
             echo 'Pipeline failed. Check logs for more details.'
         }
     }
+}
+
+def deployHelm(namespace) {
+    sh """
+    # Vérification et création du namespace si nécessaire
+    kubectl create namespace ${namespace} || true
+
+    # Mise à jour du fichier values.yml avec le tag Docker
+    cp charts/values.yaml values.yml
+    sed -i "s+tag.*+tag: ${env.DOCKER_TAG}+g" values.yml
+
+    # Déploiement avec Helm
+    helm upgrade --install movie ./charts --values=values.yml --namespace ${namespace} --set serviceName=movie
+    helm upgrade --install cast ./charts --values=values.yml --namespace ${namespace} --set serviceName=cast
+    """
 }
